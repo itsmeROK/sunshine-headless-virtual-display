@@ -1,0 +1,22 @@
+-- Sunshine headless virtual display - monitors.lua additions
+-- A persistent headless virtual monitor at the remote client's native
+-- resolution so Sunshine streams it at 1:1 (no scaling softness).
+--
+-- NOTE: merge this into your existing ~/.config/hypr/monitors.lua (or use
+-- install.sh which does it for you). Adjust the HEADLESS-1 mode to match your
+-- remote client (e.g. 2560x1664 for 13" MacBook Air M4, 2880x1864 for 15",
+-- 3024x1964 for 14" MacBook Pro, 3456x2234 for 16" MacBook Pro, ...).
+
+local physical = "DP-1"        -- your local/physical monitor output name
+local remote_ws = 11           -- reserved workspace for the remote stream
+local client_mode = "2560x1664@60.00"
+
+-- IMPORTANT: place HEADLESS-1 at the origin (0x0). If it starts at a non-zero
+-- offset, an empty dead zone forms on its left and the stream cursor cannot
+-- enter the left half of the screen.
+hl.monitor({ output = "HEADLESS-1", mode = client_mode, position = "0x0", scale = 1 })
+
+-- Reserve workspace 11 for the remote stream; it always lives on the headless.
+-- Other workspaces stay movable so the connect/disconnect hooks can migrate
+-- them to HEADLESS-1 on demand and back home afterwards.
+hl.workspace_rule({ workspace = remote_ws, monitor = "HEADLESS-1", default = true, persistent = true })
