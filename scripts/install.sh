@@ -38,30 +38,23 @@ if [ -z "$default_mode" ] && [ -f "$HOME/.config/sunshine-headless/mode" ]; then
 fi
 if [ -z "$CLIENT_MODE" ] && { [ ! -t 0 ] || [ -n "$default_mode" ]; }; then
   # Non-interactive (e.g. hook/CI) or saved choice present: don't prompt.
-  CLIENT_MODE="${default_mode:-2560x1664@60.00}"
+  # The client's actual resolution is applied dynamically by the connect hook;
+  # this is only the cheap default the headless starts at.
+  CLIENT_MODE="${default_mode:-1280x720@60.00}"
 fi
 if [ -z "$CLIENT_MODE" ]; then
-  echo "Remote client's native resolution? (streamed 1:1)"
-  echo " MacBook Air / Pro (retina, HiDPI):"
-  echo "  1) 2560x1664 @ 60  13\" MacBook Air M4          [default]"
-  echo "  2) 2880x1864 @ 60  15\" MacBook Air M4"
-  echo "  3) 3024x1964 @ 60  14\" MacBook Pro M4/Pro/Max"
-  echo "  4) 3456x2234 @ 60  16\" MacBook Pro M4 Pro/Max"
-  echo " Standard 16:9:"
-  echo "  5) 2560x1440 @ 60  QHD"
-  echo "  6) 1920x1080 @ 60  FHD"
-  echo "  7) 3840x2160 @ 60  4K"
-  echo "  8) 5120x2880 @ 60  5K"
-  read -r -p "Choose [1-8] or type res like 3440x1440@60.00: " choice
+  echo "Default headless resolution? (the connect hook applies the real client"
+  echo " resolution dynamically, so this only sets the cheap idle default)"
+  echo "  1) 1280x720  @ 60  720p            [default]"
+  echo "  2) 1920x1080 @ 60  1080p"
+  echo "  3) 2560x1440 @ 60  QHD"
+  echo "  4) 2560x1664 @ 60  2.5K (tall client)"
+  read -r -p "Choose [1-4] or type res like 3440x1440@60.00: " choice
   case "$choice" in
-    1|"")   CLIENT_MODE="2560x1664@60.00" ;;
-    2)      CLIENT_MODE="2880x1864@60.00" ;;
-    3)      CLIENT_MODE="3024x1964@60.00" ;;
-    4)      CLIENT_MODE="3456x2234@60.00" ;;
-    5)      CLIENT_MODE="2560x1440@60.00" ;;
-    6)      CLIENT_MODE="1920x1080@60.00" ;;
-    7)      CLIENT_MODE="3840x2160@60.00" ;;
-    8)      CLIENT_MODE="5120x2880@60.00" ;;
+    1|"")   CLIENT_MODE="1280x720@60.00" ;;
+    2)      CLIENT_MODE="1920x1080@60.00" ;;
+    3)      CLIENT_MODE="2560x1440@60.00" ;;
+    4)      CLIENT_MODE="2560x1664@60.00" ;;
     *)      CLIENT_MODE="$choice" ;;
   esac
 fi
@@ -95,7 +88,7 @@ if [ ! -d "$HOME/.config/hypr" ]; then
 fi
 
 if [ "$CHECK" = 1 ]; then
-  log "Preflight OK. Would: install scripts to ~/.local/bin, edit monitors.lua/sunshine.conf, install post-boot hook, open UFW ports, restart Sunshine."
+  log "Preflight OK. Would: install scripts to ~/.local/bin, edit monitors.lua/sunshine.conf, install post-boot hook, restart Sunshine."
   exit 0
 fi
 
@@ -121,6 +114,8 @@ for f in sunshine-headless-connect.sh sunshine-headless-disconnect.sh; do
       -e "s/^REMOTE_WS=.*/REMOTE_WS=$REMOTE_WS/" \
       "$SCRIPT_DIR/$f" > "$HOME/.local/bin/$f"
 done
+# Copy the legacy fallback library (no placeholders; it has none).
+install -m 0755 "$SCRIPT_DIR/sunshine-headless-legacy.sh" "$HOME/.local/bin/sunshine-headless-legacy.sh"
 chmod +x "$HOME/.local/bin/sunshine-headless-connect.sh" "$HOME/.local/bin/sunshine-headless-disconnect.sh"
 log "Installed helper scripts to ~/.local/bin/"
 
@@ -157,24 +152,27 @@ if ! grep -q "global_prep_cmd" "$SUN" 2>/dev/null; then
 fi
 log "sunshine.conf updated (output_name=$REMOTE, hooks wired)"
 
-### 5. Install the post-boot hook --------------------------------------------
-HOOKS_DIR="$HOME/.config/omarchy/hooks/post-boot.d"
-if [ -d "$HOME/.config/omarchy" ] || [ -d "$HOME/.config/omarchy/hooks" ]; then
+### 5. Install the post-boot hook (Omarchy only) ----------------------------
+# Only install the post-boot hook on a real Omarchy box. Detect it reliably:
+# the `omarchy` package is installed (Arch), OR the Omarchy post-boot.d
+# directory already exists (non-Arch / manual setups). On any other machine
+# this hook would be dead config, so leave it alone.
+OMARCHY=0
+if command -v pacman >/dev/null 2>&1 && pacman -Q omarchy >/dev/null 2>&1; then
+  OMARCHY=1
+elif [ -d "$HOME/.config/omarchy/hooks/post-boot.d" ]; then
+  OMARCHY=1
+fi
+if [ "$OMARCHY" = 1 ]; then
+  HOOKS_DIR="$HOME/.config/omarchy/hooks/post-boot.d"
   mkdir -p "$HOOKS_DIR"
   install -m 0755 "$ROOT/hooks/post-boot-ensure-sunshine.sh" "$HOOKS_DIR/sunshine-headless.hook"
   log "Installed Omarchy post-boot hook (ensures headless + Sunshine at login)"
-fi
-
-### 6. Open firewall ports ----------------------------------------------------
-if command -v ufw >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo ufw allow 47984:48010/tcp >/dev/null 2>&1 || true
-  sudo ufw allow 47984:48010/udp >/dev/null 2>&1 || true
-  log "UFW: opened Sunshine ports 47984-48010"
 else
-  warn "UFW ports not auto-opened (needs sudo). Run manually if firewall is active."
+  log "Not Omarchy; skipping Omarchy post-boot hook"
 fi
 
-### 7. Reload Hyprland + restart Sunshine -------------------------------------
+### 6. Reload Hyprland + restart Sunshine -------------------------------------
 hyprctl reload >/dev/null 2>&1 || true
 if command -v sunshine >/dev/null 2>&1; then
   pkill -x sunshine 2>/dev/null || true

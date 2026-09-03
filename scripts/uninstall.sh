@@ -24,7 +24,8 @@ if [ "$YES" = 0 ]; then
 fi
 
 rm -f "$HOME/.local/bin/sunshine-headless-connect.sh" \
-      "$HOME/.local/bin/sunshine-headless-disconnect.sh"
+      "$HOME/.local/bin/sunshine-headless-disconnect.sh" \
+      "$HOME/.local/bin/sunshine-headless-legacy.sh"
 rm -f "$HOME/.local/share/sunshine-headless.log"
 
 # Remove the monitors.lua block we added (guarded marker comment).
