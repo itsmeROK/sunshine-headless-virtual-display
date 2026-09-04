@@ -8,8 +8,23 @@ PHYSICAL="DP-1"
 REMOTE="HEADLESS-1"
 REMOTE_WS=11
 
+STATE="$HOME/.local/share/sunshine-headless-mode"
+STAYAWAKESTATE="$HOME/.local/share/sunshine-headless-stayawake"
 loginctl unlock-session 2>/dev/null
-pkill -STOP -x hypridle 2>/dev/null
+# Keep the screen awake during the stream so the compositor's idle/screensaver
+# doesn't steal focus. On Omarchy the shell drives idle (stay-awake marker);
+# elsewhere the classic way is stopping the idle daemon. Remember the previous
+# stay-awake state so the disconnect hook can restore exactly what was before.
+if command -v omarchy-toggle-idle >/dev/null 2>&1; then
+    if [ -f "$HOME/.local/state/omarchy/indicators/stay-awake" ]; then
+        printf '1\n' > "$STAYAWAKESTATE"
+    else
+        printf '0\n' > "$STAYAWAKESTATE"
+    fi
+    omarchy-toggle-idle stay-awake >/dev/null 2>&1
+else
+    pkill -STOP -x hypridle 2>/dev/null
+fi
 
 # Detect Hyprland config provider (Lua 0.55+, or legacy dispatchers).
 LUA=0
@@ -31,7 +46,6 @@ fi
 # Sunshine exports SUNSHINE_CLIENT_WIDTH/HEIGHT while running this "do"
 # command. Resize the headless to match; if the client's mode isn't
 # supported, Hyprland keeps the monitors.lua default.
-STATE="$HOME/.local/share/sunshine-headless-mode"
 if [ -n "${SUNSHINE_CLIENT_WIDTH:-}" ] && [ -n "${SUNSHINE_CLIENT_HEIGHT:-}" ]; then
     RATE="${SUNSHINE_CLIENT_FPS:-60}"
     MODE="${SUNSHINE_CLIENT_WIDTH}x${SUNSHINE_CLIENT_HEIGHT}@${RATE}"

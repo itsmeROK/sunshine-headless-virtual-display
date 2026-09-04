@@ -19,6 +19,7 @@ fi
 # Restore the headless display to its pre-stream resolution, if the connect
 # hook resized it to match the client.
 STATE="$HOME/.local/share/sunshine-headless-mode"
+STAYAWAKESTATE="$HOME/.local/share/sunshine-headless-stayawake"
 if [ -f "$STATE" ]; then
     ORIG="$(cat "$STATE" 2>/dev/null || true)"
     rm -f "$STATE"
@@ -53,7 +54,19 @@ else
     legacy_focus "$PHYSICAL"
 fi
 
-pkill -CONT -x hypridle 2>/dev/null
+# Restore the idle setting from before the stream (mirrors the connect hook,
+# which recorded whether the user had stay-awake on or off).
+if command -v omarchy-toggle-idle >/dev/null 2>&1; then
+    PREV_STAYAWAKE="$(cat "$STAYAWAKESTATE" 2>/dev/null || true)"
+    rm -f "$STAYAWAKESTATE"
+    if [ "$PREV_STAYAWAKE" = "1" ]; then
+        omarchy-toggle-idle stay-awake >/dev/null 2>&1
+    else
+        omarchy-toggle-idle allow-idle >/dev/null 2>&1
+    fi
+else
+    pkill -CONT -x hypridle 2>/dev/null
+fi
 
 echo "$(date -Iseconds) Client disconnected, workspaces restored to $PHYSICAL" >> "$LOG"
 exit 0
